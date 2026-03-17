@@ -12,3 +12,5 @@ plt.title("Raw ECG signal")
 plt.xlim(0, t[-1])
 
 
+%%% Deel 2 - Ventriculaire activiteit %%%
+
