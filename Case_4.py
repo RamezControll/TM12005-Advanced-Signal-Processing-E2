@@ -65,25 +65,22 @@ mean_rr, mean_hr, rr = rr_hr_from_peaks(t, peaks)
 # -----------------------------
 # Plot results
 # -----------------------------
-fig, ax = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+fig, ax = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
 ax[0].plot(t, ecg)
 ax[0].set_title("Raw ECG")
 ax[0].set_ylabel("ECG (mV)")
 ax[0].grid(True)
 
-ax[1].plot(t, y_der)
-ax[1].set_title("Derivative-based filtered ECG")
+ax[1].plot(t, y_mwi, label="MWI")
+ax[1].axhline(thr, linestyle="--", color="r", label="Threshold")
+ax[1].plot(t[peaks], y_mwi[peaks], "x", label="Detected peaks")
+ax[1].set_title("MWI + peak detection")
+ax[1].set_xlabel("Time (s)")
+ax[1].set_ylabel("MWI")
+ax[1].set_ylim(-1e6, 5e6)
 ax[1].grid(True)
-
-ax[2].plot(t, y_mwi, label="MWI")
-ax[2].axhline(thr, linestyle="--", color="r", label="Threshold")
-ax[2].plot(t[peaks], y_mwi[peaks], "x", label="Detected peaks")
-ax[2].set_title("MWI + peak detection")
-ax[2].set_xlabel("Time (s)")
-ax[2].set_ylabel("MWI")
-ax[2].grid(True)
-ax[2].legend()
+ax[1].legend()
 
 # Show first 10 seconds
 ax[0].set_xlim(0, 120)
