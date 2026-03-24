@@ -12,6 +12,7 @@ ecg, fs, t = read_ecg_mat("../Data_E2/005_Pimpel.mat", plotresult=True)
 t = np.arange(len(ecg)) / fs
 
 
+
 ## Deel 2 - Ventriculaire activiteit %%%
 
 def bandpass_ecg(x, fs, low=5.0, high=15.0, order=3):
@@ -88,19 +89,18 @@ ax[0].set_xlim(0, 120)
 plt.tight_layout()
 plt.show()
 
-# -----------------------------
-# Print results for the plotted range
-# -----------------------------
-plot_start, plot_end = 0, 120  # seconds
-plot_mask = (t >= plot_start) & (t <= plot_end)
-plot_peaks = peaks[(t[peaks] >= plot_start) & (t[peaks] <= plot_end)]
+# # -----------------------------
+# # Print metricresults for the plotted range
+# # -----------------------------
+# plot_start, plot_end = 0, 120  # seconds
+# plot_mask = (t >= plot_start) & (t <= plot_end)
+# plot_peaks = peaks[(t[peaks] >= plot_start) & (t[peaks] <= plot_end)]
 
-if len(plot_peaks) > 1:
-    plot_mean_rr, plot_mean_hr, _ = rr_hr_from_peaks(t[plot_mask], plot_peaks)
-    print(f"Measured length of the plotted range: {plot_end - plot_start} seconds")
-    print(f"Detected peaks in plot range: {len(plot_peaks)}")
-    print(f"Mean RR in plot range: {plot_mean_rr:.3f} s")
-    print(f"Mean HR in plot range: {plot_mean_hr:.2f} bpm")
-else:
-    print("Not enough peaks detected in the plot range to calculate RR and HR.")
-
+# if len(plot_peaks) > 1:
+#     plot_mean_rr, plot_mean_hr, _ = rr_hr_from_peaks(t[plot_mask], plot_peaks)
+#     print(f"Measured length of the plotted range: {plot_end - plot_start} seconds")
+#     print(f"Detected peaks in plot range: {len(plot_peaks)}")
+#     print(f"Mean RR in plot range: {plot_mean_rr:.3f} s")
+#     print(f"Mean HR in plot range: {plot_mean_hr:.2f} bpm")
+# else:
+#     print("Not enough peaks detected in the plot range to calculate RR and HR.")
