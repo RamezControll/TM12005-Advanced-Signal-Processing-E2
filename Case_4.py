@@ -12,7 +12,6 @@ ecg, fs, t = read_ecg_mat("../Data_E2/005_Pimpel.mat", plotresult=True)
 t = np.arange(len(ecg)) / fs
 
 
-
 ## Deel 2 - Ventriculaire activiteit %%%
 
 def bandpass_ecg(x, fs, low=5.0, high=15.0, order=3):
