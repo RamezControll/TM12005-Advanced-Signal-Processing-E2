@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
+from scipy.ndimage import binary_dilation
 
 from read_telemetry_ecg import read_ecg_mat
 
@@ -274,7 +275,8 @@ def detect_qrs_complexes(
             continue
 
         local_baseline = np.median(segment)
-        local_idx = int(np.argmax(np.abs(segment - local_baseline)))
+        # local_idx = int(np.argmax(np.abs(segment - local_baseline)))
+        local_idx = int(np.argmax(segment))
         refined_peak_indices.append(start + local_idx)
 
     qrs_peak_indices = merge_nearby_peaks(sorted(refined_peak_indices), clean_ecg, merge_samples)
@@ -573,17 +575,17 @@ def classify_pacing_events(
     atrial_max_delay_ms=140,
     atrial_same_peak_max_ms=20,
     p_qrs_guard_ms=60,
-    p_min_height_abs=0.2,
-    p_min_prominence_abs=0.35,
-    raw_p_height_min=0.35,
+    p_min_height_abs=0.1,
+    p_min_prominence_abs=0.15,
+    raw_p_height_min=0.15,
     raw_p_height_ratio=0.004,
     inter_spike_guard_ms=20,
     ventricular_min_delay_ms=5,
-    ventricular_max_delay_ms=180,
+    ventricular_max_delay_ms=240,
     ventricular_peak_max_ms=280,
     ventricular_wide_qrs_ms=115,
     ventricular_large_qrs_amp=170,
-    fallback_ventricular_max_delay_ms=190,
+    fallback_ventricular_max_delay_ms=260,
     fallback_ventricular_min_qrs_width_ms=60,
     fallback_ventricular_min_qrs_amp=120,
 ):
@@ -640,26 +642,22 @@ def classify_pacing_events(
             if spike_idx >= qrs_onset_indices[prev_pos] - qrs_error_pre_samples:
                 related_qrs_idx = qrs_peak_indices[prev_pos]
                 q_landmark_idx = int(q_landmark_indices[prev_pos])
+                r_peak_idx = int(r_peak_indices[prev_pos])
                 prev_qrs_width_ms = float(qrs_widths_ms[prev_pos])
                 prev_qrs_excursion = float(qrs_excursions[prev_pos])
                 dt_from_q_landmark = spike_idx - q_landmark_idx
 
                 if spike_idx <= q_landmark_idx + q_landmark_tolerance_samples:
                     label = "ventriculair"
-                elif (
-                    (
-                        prev_qrs_width_ms <= q_error_narrow_qrs_ms
-                        and prev_qrs_excursion >= q_error_narrow_min_qrs_amp
-                    )
-                    or (
-                        prev_qrs_width_ms <= q_error_low_amp_qrs_ms
-                        and prev_qrs_excursion < q_error_low_amp_max_qrs_amp
-                        and dt_from_q_landmark >= q_error_low_amp_delay_samples
-                    )
-                ):
-                    label = "pacingfout"
                 else:
-                    label = "ventriculair"
+                    label = "pacingfout"
+                print(
+                    f"PREV | spike={spike_idx/fs:.3f}s "
+                    f"| r_peak={r_peak_idx/fs:.3f}s "
+                    f"| q_landmark={q_landmark_idx/fs:.3f}s "
+                    f"| dt_from_q={dt_from_q_landmark} "
+                    f"| label={label}"
+                )
 
         if label == "onbekend" and next_pos < len(qrs_onset_indices):
             next_qrs_onset = int(qrs_onset_indices[next_pos])
@@ -763,6 +761,15 @@ def classify_pacing_events(
                     label = "ventriculair"
                     related_qrs_idx = next_qrs_peak
                 elif (
+                    -30 <= next_qrs_peak - spike_idx <= 300
+                    and (
+                        next_qrs_width_ms >= fallback_ventricular_min_qrs_width_ms
+                        or next_qrs_excursion >= fallback_ventricular_min_qrs_amp
+                    )
+                ):
+                    label = "ventriculair"
+                    related_qrs_idx = next_qrs_peak
+                elif (
                     dt_to_qrs <= fallback_ventricular_max_delay_samples
                     and (
                         next_qrs_width_ms >= fallback_ventricular_min_qrs_width_ms
@@ -771,7 +778,34 @@ def classify_pacing_events(
                 ):
                     label = "ventriculair"
                     related_qrs_idx = next_qrs_peak
+                elif (                                   
+                    next_spike_idx is not None
+                    and next_spike_idx < next_qrs_onset
+                    and next_qrs_excursion >= fallback_ventricular_min_qrs_amp
+                ):
+                    label = "ventriculair"
+                    related_qrs_idx = next_qrs_peak
 
+        if label == "onbekend":
+            print(
+                f"ONBEKEND | spike={spike_idx/fs:.3f}s "
+                f"| dt_to_onset={dt_to_qrs if 'dt_to_qrs' in dir() else 'N/A'} "
+                f"| dt_to_peak={dt_to_qrs_peak if 'dt_to_qrs_peak' in dir() else 'N/A'} "
+                f"| width={next_qrs_width_ms if 'next_qrs_width_ms' in dir() else 'N/A':.1f}ms "
+                f"| excursion={next_qrs_excursion if 'next_qrs_excursion' in dir() else 'N/A':.1f}"
+            )
+
+            if label == "ventriculair" and artifact_event.get("related_p_index") is None:
+                # Controleer of er toch een P-golf in de buurt was
+                spike_idx = artifact_event["center_index"]
+                if next_pos < len(qrs_onset_indices):
+                    print(
+                        f"VENT-GEEN-P | spike={spike_idx/fs:.3f}s "
+                        f"| next_qrs={qrs_onset_indices[next_pos]/fs:.3f}s "
+                        f"| dt_to_onset={qrs_onset_indices[next_pos]-spike_idx} "
+                        f"| cycle_p={cycle_p_idx} "
+                        f"| local_p={local_p_candidate}"
+                    )
         pacing_events.append({
             "spike_index": artifact_event["center_index"],
             "trough_index": artifact_event["trough_index"],
@@ -986,9 +1020,9 @@ def main():
     p_search_back_ms = 320
     p_qrs_guard_ms = 60
     p_previous_qrs_guard_ms = 45
-    p_min_height_abs = 0.2
-    p_min_prominence_abs = 0.35
-    raw_p_height_min = 0.35
+    p_min_height_abs = 0.1
+    p_min_prominence_abs = 0.15
+    raw_p_height_min = 0.15
     raw_p_height_ratio = 0.004
     inter_spike_guard_ms = 20
 
@@ -1006,11 +1040,11 @@ def main():
     atrial_max_delay_ms = 140
     atrial_same_peak_max_ms = 20
     ventricular_min_delay_ms = 5
-    ventricular_max_delay_ms = 180
+    ventricular_max_delay_ms = 240
     ventricular_peak_max_ms = 280
     ventricular_wide_qrs_ms = 115
     ventricular_large_qrs_amp = 170
-    fallback_ventricular_max_delay_ms = 190
+    fallback_ventricular_max_delay_ms = 260
     fallback_ventricular_min_qrs_width_ms = 60
     fallback_ventricular_min_qrs_amp = 120
 
@@ -1077,6 +1111,37 @@ def main():
         merge_ms=qrs_merge_ms,
         local_threshold_ratio=qrs_local_threshold_ratio,
     )
+
+    # Filter spurious detections (zero-width / zero-excursion)
+    min_qrs_excursion = 20.0  # pas aan op jouw signaal
+    valid = qrs_excursions > min_qrs_excursion
+    qrs_peak_indices   = qrs_peak_indices[valid]
+    qrs_onset_indices  = qrs_onset_indices[valid]
+    qrs_offset_indices = qrs_offset_indices[valid]
+    qrs_widths_ms      = qrs_widths_ms[valid]
+    qrs_excursions     = qrs_excursions[valid]
+
+    # Na remove_baseline_wander, voor QRS-detectie
+    large_artifact_threshold = 500  
+    large_artifact_mask = np.abs(analysis_ecg) > large_artifact_threshold
+
+    # Verbreed het masker met een marge rondom elk artefact (bijv. 1 seconde)
+    margin_samples = int(1.0 * fs)
+    large_artifact_mask = binary_dilation(large_artifact_mask, iterations=margin_samples)
+
+    # Sla dit op en gebruik het om QRS-detecties die in artefacten vallen te filteren
+    valid_qrs = ~large_artifact_mask[qrs_peak_indices]
+    qrs_peak_indices  = qrs_peak_indices[valid_qrs]
+    qrs_onset_indices = qrs_onset_indices[valid_qrs]
+    qrs_offset_indices = qrs_offset_indices[valid_qrs]
+    qrs_widths_ms     = qrs_widths_ms[valid_qrs]
+    qrs_excursions    = qrs_excursions[valid_qrs]
+
+    # En artifact_events filteren die in artefacten vallen
+    artifact_events = [
+        e for e in artifact_events
+        if not large_artifact_mask[e["center_index"]]
+    ]
 
     p_wave_signal = build_p_wave_signal(analysis_ecg, fs)
     p_peak_indices = estimate_p_peaks(
